@@ -44,11 +44,14 @@ contract FundMe {
 
     bool public getFundSuccess = false;
     
-    AggregatorV3Interface internal dataFeed;
+    AggregatorV3Interface public dataFeed;
 
-    constructor(uint256 _locktime){
+    event getFundByOwner(uint256);
+    event reFundByFunder(address ,uint256);
+
+    constructor(uint256 _locktime, address _dataFeedAddr){
         owner = msg.sender;
-        dataFeed = AggregatorV3Interface(0x694AA1769357215DE4FAC081bf1f309aDC325306);
+        dataFeed = AggregatorV3Interface(_dataFeedAddr);
         deploymentTimestamp = block.timestamp;
         locktime = _locktime;
     }
@@ -85,10 +88,13 @@ contract FundMe {
         // send:transfer ETH and return false if tx failed.payable(msg.sender).send(address(this).balance).
         // call:transfer ETH with data return value of function and bool.
         bool success;
-        (success,) = payable(msg.sender).call{value:address(this).balance}("");
+        uint256 amount = address(this).balance;
+        (success,) = payable(msg.sender).call{value:amount}("");
         require(success,"Getfund transaction is failed!");
         fundersToAmount[msg.sender] = 0;
         getFundSuccess = true; // flag
+
+        emit getFundByOwner(amount);
     }
 
     function reFund() external windowClosed {
@@ -98,6 +104,8 @@ contract FundMe {
         (success,) = payable(msg.sender).call{value:fundersToAmount[msg.sender]}("");
         require(success,"Refund transaction is failed!");
         fundersToAmount[msg.sender] = 0;
+
+        emit reFundByFunder(msg.sender,fundersToAmount[msg.sender]);
 
     }
 

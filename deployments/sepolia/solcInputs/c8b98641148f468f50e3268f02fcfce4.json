@@ -1,0 +1,39 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\n// solhint-disable-next-line interface-starts-with-i\ninterface AggregatorV3Interface {\n  function decimals() external view returns (uint8);\n\n  function description() external view returns (string memory);\n\n  function version() external view returns (uint256);\n\n  function getRoundData(\n    uint80 _roundId\n  ) external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);\n\n  function latestRoundData()\n    external\n    view\n    returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);\n}\n"
+    },
+    "contracts/FundMe.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\nimport {AggregatorV3Interface} from \"@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol\";\n\n// 1.Create a fund function.\n// 2.Record funders and retrive investment funds.\n// 3.During the lock-up period,achieve the target value,the producer can withdraw funds.-- getFund\n// 4.If the target value is not reached,investors can request a refund -- reFund.\n\n/* Coin(native Token):\n  1.A coin is a digital currency similar to the physical currency.\n  2.Coin operates on its own blockchain with its own protocol.\n  3.Coins are purely used as a source of payments.\n  4.For e.g. Ripple and Etheruem.\n*/\n\n/* Token:\n  1.A token is a digital asset issued on a particular project.\n  2.Token does not operate on their own blockchain.\n  3.Tokens are used for payments and signing digital agreements.\n  4.For e.g. BON and DAO token.\n*/\n\ncontract FundMe {\n\n    mapping(address => uint256) public fundersToAmount;\n\n    // Oracle problem:Smart contract are unable to connect external system,data feed,APIs.\n    // Existing payment systems or any other off-chain resources on their own.\n    // consensus:Submit transaction,Broadcast transaction,Reach consensus.\n    // Decentralized Oracle Network(DON):Full replicas being run by independent and sybil-resistent node operators.\n    // Data delivery layer mimic the trust-minimized that blockchain has.\n    uint256 constant MINIMUM_VALUE = 5*10**18;\n\n    uint256 constant TARGET_VALUE = 25*10**18; \n\n    address public owner;\n\n    uint256 deploymentTimestamp;\n\n    uint256 locktime;\n\n    address erc20Addr;\n\n    bool public getFundSuccess = false;\n    \n    AggregatorV3Interface public dataFeed;\n\n    constructor(uint256 _locktime, address _dataFeedAddr){\n        owner = msg.sender;\n        dataFeed = AggregatorV3Interface(_dataFeedAddr);\n        deploymentTimestamp = block.timestamp;\n        locktime = _locktime;\n    }\n\n    function fund() external payable {\n        require(convertEthToUsd(msg.value) >= MINIMUM_VALUE, \"You cannot fund less than minimum amount\");\n        require(block.timestamp < deploymentTimestamp+locktime,\"Fund window is closed!\");\n        fundersToAmount[msg.sender] = msg.value;\n\n    }\n\n    function getChainlinkDataFeedLatestAnswer() public view returns (int) {\n        // prettier-ignore\n        (\n            /* uint80 roundId */,\n            int256 answer,\n            /*uint256 startedAt*/,\n            /*uint256 updatedAt*/,\n            /*uint80 answeredInRound*/\n        ) = dataFeed.latestRoundData();\n        \n        return answer;\n    }\n\n    function convertEthToUsd(uint256 ethAmount) internal view returns (uint256){\n        uint256 ethPrice =  uint256(getChainlinkDataFeedLatestAnswer());\n        return ethAmount * ethPrice / (10**8);\n\n    }\n\n    function getFund() external  windowClosed onlyOwner {\n        require(convertEthToUsd(address(this).balance) >= TARGET_VALUE,\"target is not reached!\");\n        // transfer:Transfer ETH and revert if tx is failed.payable(msg.sender).transfer(address(this).balance).\n        // send:transfer ETH and return false if tx failed.payable(msg.sender).send(address(this).balance).\n        // call:transfer ETH with data return value of function and bool.\n        bool success;\n        (success,) = payable(msg.sender).call{value:address(this).balance}(\"\");\n        require(success,\"Getfund transaction is failed!\");\n        fundersToAmount[msg.sender] = 0;\n        getFundSuccess = true; // flag\n    }\n\n    function reFund() external windowClosed {\n        require(convertEthToUsd(address(this).balance) < TARGET_VALUE,\"target is reached!\");\n        require(fundersToAmount[msg.sender] != 0,\"You have not fund to refund\");\n        bool success;\n        (success,) = payable(msg.sender).call{value:fundersToAmount[msg.sender]}(\"\");\n        require(success,\"Refund transaction is failed!\");\n        fundersToAmount[msg.sender] = 0;\n\n    }\n\n    function setFunderToAmout(address _funder,uint256 _amountToUpdate) external {\n        require(msg.sender == erc20Addr,\"You don't permission to call this function!\");\n        fundersToAmount[_funder] = _amountToUpdate;\n    }\n\n    function setErc20Addr(address _erc20Addr) public onlyOwner{\n        erc20Addr = _erc20Addr;\n    }\n\n    function transferOwnership(address newOwer) public onlyOwner {\n        owner = newOwer;\n    }\n\n    modifier windowClosed(){\n        require(block.timestamp >= deploymentTimestamp+locktime,\"Fund window is not close!\");\n        _;\n    }\n\n    modifier onlyOwner(){\n        require(msg.sender == owner, \"Only Owner can do this\");\n        _;\n    }\n\n}"
+    }
+  },
+  "settings": {
+    "evmVersion": "paris",
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}
